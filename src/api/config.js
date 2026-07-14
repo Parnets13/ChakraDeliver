@@ -30,8 +30,9 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   response => response,
   async error => {
+    const status = error.response?.status;
     console.log('[API ERROR]', error.message, error.config?.url);
-    if (error.response?.status === 401) {
+    if (status === 401) {
       await AsyncStorage.removeItem('authToken');
     }
     return Promise.reject(error);

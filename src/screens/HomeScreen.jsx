@@ -13,12 +13,30 @@ import {COLORS} from '../theme/colors';
 import {useDeliveryStore} from '../store/deliveryStore';
 import {useAuthStore} from '../store/authStore';
 
+const QUICK_ACTIONS = [
+  {id: 'deliveries', label: 'Deliveries',       icon: 'truck-fast-outline', lib: 'mc',     color: COLORS.PRIMARY, bg: COLORS.LIGHT_RED,    screen: 'Deliveries', type: 'tab'},
+  {id: 'history',    label: 'Delivery History', icon: 'clock',              lib: 'feather', color: COLORS.SUCCESS, bg: COLORS.LIGHT_GREEN,  screen: 'History',    type: 'stack'},
+  {id: 'scan',       label: 'Scan',             icon: 'qrcode-scan',        lib: 'mc',     color: '#7B4FD4',      bg: '#EDE7F6',           screen: 'Scan',       type: 'tab'},
+  {id: 'returns',    label: 'Returns',          icon: 'rotate-ccw',         lib: 'feather', color: COLORS.WARNING, bg: COLORS.LIGHT_ORANGE, screen: 'Returns',    type: 'tab'},
+];
+
 export default function HomeScreen({navigation}) {
   const {stats, deliveries, fetchDeliveries, fetchStats, fetchNotifications, getNextDelivery, getUnreadCount, isLoading} = useDeliveryStore();
   const agent = useAuthStore(state => state.agent);
   const nextDelivery = getNextDelivery();
   const unreadCount = getUnreadCount();
-  const pendingCount = deliveries.filter(d => d.status === 'pending').length;
+
+  // Dynamic greeting based on time of day
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning,' : hour < 17 ? 'Good afternoon,' : 'Good evening,';
+
+  const handleQuickAction = item => {
+    if (item.type === 'stack') {
+      navigation.navigate(item.screen);
+    } else {
+      navigation.navigate('Main', {screen: item.screen});
+    }
+  };
 
   useEffect(() => {
     fetchDeliveries();
@@ -28,14 +46,14 @@ export default function HomeScreen({navigation}) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* ── Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>Good morning,</Text>
+          <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.agentName}>{agent?.name || 'Agent'}</Text>
           <View style={styles.idRow}>
             <Icon name="award" size={11} color="rgba(255,255,255,0.85)" />
-            <Text style={styles.agentId}> {agent?.agentId || ''} · {agent?.zone || ''}</Text>
+            <Text style={styles.agentId}> {agent?.agentId || ''}{agent?.zone ? ' · ' + agent.zone : ''}</Text>
           </View>
         </View>
         <View style={styles.headerRight}>
@@ -101,7 +119,31 @@ export default function HomeScreen({navigation}) {
           />
         </View>
 
-        {/* Pending Returns Alert - only show if there are failed deliveries */}
+        {/* ════════════════════════════
+            QUICK ACTIONS
+        ════════════════════════════ */}
+        <View style={styles.quickSection}>
+          <Text style={styles.quickHeading}>Quick Actions</Text>
+          <View style={styles.quickRow}>
+            {QUICK_ACTIONS.map(item => {
+              const IconLib = item.lib === 'mc' ? IconMC : Icon;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.quickCard}
+                  onPress={() => handleQuickAction(item)}
+                  activeOpacity={0.75}>
+                  <View style={[styles.quickIconWrap, {backgroundColor: item.bg}]}>
+                    <IconLib name={item.icon} size={26} color={item.color} />
+                  </View>
+                  <Text style={[styles.quickLabel, {color: item.color}]}>{item.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* ── Pending Returns Alert ── */}
         {deliveries.filter(d => d.status === 'failed').length > 0 && (
           <TouchableOpacity
             style={styles.alertBanner}
@@ -216,6 +258,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerLeft: {flex: 1},
+  brandName: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.65)',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
   greeting: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.85)',
@@ -315,6 +365,50 @@ const styles = StyleSheet.create({
     color: COLORS.MUTED,
     marginTop: 1,
   },
+
+  /* ── Quick Actions ── */
+  quickSection: {
+    marginHorizontal: 4,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  quickHeading: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.TEXT,
+    marginBottom: 10,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  quickCard: {
+    width: '47.5%',
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  quickIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  quickLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  /* ── Alert banner ── */
   alertBanner: {
     flexDirection: 'row',
     alignItems: 'center',

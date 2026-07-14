@@ -40,11 +40,18 @@ export default function SplashScreen({navigation}) {
       if (token) {
         const success = await loadProfile();
         if (success) {
-          navigation.replace('Main');
+          // loadProfile restores isOtpVerified from AsyncStorage
+          const {isOtpVerified} = useAuthStore.getState();
+          if (isOtpVerified) {
+            navigation.replace('Main');
+            return;
+          }
+          // Token exists but OTP not verified — send back to Login
+          navigation.replace('Login');
           return;
         }
       }
-      navigation.replace('Login');
+      navigation.replace('SelectUserType');
     };
 
     checkAuth();

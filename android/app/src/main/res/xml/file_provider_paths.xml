@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider paths for react-native-image-picker v5+
+  These paths cover all locations the library may write temporary camera images to.
+-->
+<paths>
+    <!-- Internal app files directory: getFilesDir() -->
+    <files-path name="internal_files" path="." />
+
+    <!-- Internal app cache: getCacheDir() — image-picker writes here on some devices -->
+    <cache-path name="internal_cache" path="." />
+
+    <!-- App-specific external files: getExternalFilesDir() -->
+    <external-files-path name="external_app_files" path="." />
+
+    <!-- App-specific external cache: getExternalCacheDir() -->
+    <external-cache-path name="external_cache" path="." />
+
+    <!-- Shared external storage root (needed for Android < 10) -->
+    <external-path name="external_storage" path="." />
+</paths>

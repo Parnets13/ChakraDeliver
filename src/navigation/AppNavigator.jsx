@@ -9,6 +9,10 @@ import {COLORS} from '../theme/colors';
 
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
+
+import SelectUserTypeScreen from '../screens/SelectUserTypeScreen';
+import EmployeeRegistrationScreen from '../screens/EmployeeRegistrationScreen';
+import DeliveryLogisticsRegistrationScreen from '../screens/DeliveryLogisticsRegistrationScreen';
 import HomeScreen from '../screens/HomeScreen';
 import DeliveryListScreen from '../screens/DeliveryListScreen';
 import DeliveryDetailScreen from '../screens/DeliveryDetailScreen';
@@ -131,7 +135,11 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{headerShown: false}}>
         <Stack.Screen name="Splash" component={SplashScreen} />
+        <Stack.Screen name="SelectUserType" component={SelectUserTypeScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
+       
+        <Stack.Screen name="EmployeeRegistration" component={EmployeeRegistrationScreen} />
+        <Stack.Screen name="DeliveryLogisticsRegistration" component={DeliveryLogisticsRegistrationScreen} />
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="DeliveryDetail" component={DeliveryDetailScreen} />
         <Stack.Screen name="POD" component={PODScreen} />

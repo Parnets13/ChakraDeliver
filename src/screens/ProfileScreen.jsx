@@ -1,5 +1,6 @@
-import React, {useState} from 'react';
-import {View, Text, ScrollView, StyleSheet, TouchableOpacity} from 'react-native';
+import React, {useState, useEffect} from 'react';
+import {View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Image} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Feather';
 import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import {COLORS} from '../theme/colors';
@@ -7,28 +8,86 @@ import {useAuthStore} from '../store/authStore';
 import AppModal from '../components/AppModal';
 
 const menuItems = [
-  {id: 'returns', icon: 'rotate-ccw', lib: 'feather', label: 'My Returns', screen: 'Returns'},
+  {id: 'returns', icon: 'rotate-ccw', lib: 'feather', label: 'My Returns', screen: 'Main', params: {screen: 'Returns'}},
   {id: 'history', icon: 'clock', lib: 'feather', label: 'Delivery History', screen: 'History'},
   {id: 'route', icon: 'map', lib: 'feather', label: 'My Route', screen: 'Route'},
   {id: 'notifications', icon: 'bell', lib: 'feather', label: 'Notifications', screen: 'Notifications'},
   {id: 'settings', icon: 'settings', lib: 'feather', label: 'Settings', screen: 'Settings'},
 ];
 
+/** Format an ISO date string / Date object to DD/MM/YYYY for display */
+function fmtDate(val) {
+  if (!val) return null;
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return String(val);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+/** Reusable detail row for Personal Details card */
+function DetailRow({icon, label, value, masked, multiline, last}) {
+  const isEmpty = !value || (typeof value === 'string' && value.trim() === '');
+  return (
+    <View style={[pdStyles.row, !last && pdStyles.rowBorder]}>
+      <View style={pdStyles.iconWrap}>
+        <Icon name={icon} size={13} color={COLORS.PRIMARY} />
+      </View>
+      <View style={pdStyles.rowContent}>
+        <Text style={pdStyles.rowLabel}>{label}</Text>
+        <Text
+          style={[
+            pdStyles.rowValue,
+            masked && pdStyles.rowMasked,
+            isEmpty && pdStyles.rowEmpty,
+          ]}
+          numberOfLines={multiline ? 3 : 1}>
+          {isEmpty ? '—' : value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function ProfileScreen({navigation}) {
   const agent = useAuthStore(state => state.agent);
   const logout = useAuthStore(state => state.logout);
+  const loadProfile = useAuthStore(state => state.loadProfile);
   const [showLogout, setShowLogout] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+  const [savedPassword, setSavedPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Fetch fresh profile data on mount so Personal Details are always up-to-date
+  useEffect(() => {
+    (async () => {
+      setProfileLoading(true);
+      setProfileError(null);
+      try {
+        await loadProfile();
+        // Load locally-stored password (saved at login time)
+        const pwd = await AsyncStorage.getItem('userPassword');
+        setSavedPassword(pwd || '');
+      } catch {
+        setProfileError('Could not load profile details. Please try again.');
+      } finally {
+        setProfileLoading(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleMenuPress = item => {
     if (item.screen) {
-      navigation.navigate(item.screen);
+      navigation.navigate(item.screen, item.params || undefined);
     }
   };
 
   const handleLogout = async () => {
     setShowLogout(false);
     await logout();
-    navigation.reset({index: 0, routes: [{name: 'Login'}]});
+    navigation.reset({index: 0, routes: [{name: 'SelectUserType'}]});
   };
 
   return (
@@ -45,21 +104,40 @@ export default function ProfileScreen({navigation}) {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.profileRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>RK</Text>
+            {/* Avatar — shows profile photo if available, else initials */}
+            <View style={styles.avatarWrap}>
+              {agent?.profilePhoto ? (
+                <Image
+                  source={{uri: agent.profilePhoto}}
+                  style={styles.avatarImg}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {agent?.name
+                      ? agent.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                      : 'AG'}
+                  </Text>
+                </View>
+              )}
             </View>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{agent?.name || 'Agent'}</Text>
-              <Text style={styles.profileId}>Agent ID: {agent?.agentId || ''}</Text>
+              <Text style={styles.profileId}>ID: {agent?.agentId || ''}</Text>
+              {agent?.designation ? (
+                <Text style={styles.profileDesig}>{agent.designation}</Text>
+              ) : null}
               <View style={styles.badgeRow}>
                 <View style={styles.activeBadge}>
                   <View style={styles.activeDot} />
                   <Text style={styles.activeBadgeText}>{agent?.status || 'Active'}</Text>
                 </View>
-                <View style={styles.zoneRow}>
-                  <Icon name="map-pin" size={11} color={COLORS.MUTED} />
-                  <Text style={styles.zoneText}> {agent?.zone || ''}</Text>
-                </View>
+                {agent?.department ? (
+                  <View style={styles.deptBadge}>
+                    <Text style={styles.deptBadgeText}>{agent.department}</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           </View>
@@ -84,6 +162,82 @@ export default function ProfileScreen({navigation}) {
             <Text style={styles.statValue}>{agent?.stats?.avgPerDay || 0}</Text>
             <Text style={styles.statLabel}>Avg/Day</Text>
           </View>
+        </View>
+
+        {/* ─── Personal Details Card ─────────────────────────────── */}
+        <View style={styles.personalCard}>
+          {/* Card header */}
+          <View style={styles.personalCardHeader}>
+            <View style={styles.personalCardHeaderIcon}>
+              <Icon name="credit-card" size={15} color={COLORS.WHITE} />
+            </View>
+            <View>
+              <Text style={styles.personalCardTitle}>User Details</Text>
+             
+            </View>
+          </View>
+
+          {profileLoading ? (
+            <View style={styles.personalLoadingWrap}>
+              <ActivityIndicator size="small" color={COLORS.PRIMARY} />
+              <Text style={styles.personalLoadingText}>Fetching your details…</Text>
+            </View>
+          ) : profileError ? (
+            <TouchableOpacity
+              style={styles.personalErrorWrap}
+              onPress={async () => {
+                setProfileLoading(true);
+                setProfileError(null);
+                try { await loadProfile(); } catch { setProfileError('Could not load profile. Tap to retry.'); }
+                finally { setProfileLoading(false); }
+              }}>
+              <Icon name="alert-circle" size={20} color={COLORS.FAILED} />
+              <Text style={styles.personalErrorText}>{profileError}</Text>
+              <Icon name="refresh-cw" size={14} color={COLORS.FAILED} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.personalBody}>
+              <View style={styles.sectionCard}>
+                <DetailRow icon="user"        label="Full Name"       value={agent?.name} />
+                <DetailRow icon="phone"       label="Mobile"          value={agent?.phone} />
+                <DetailRow icon="mail"        label="Email ID"        value={agent?.email} />
+                {/* Password row — shows actual password with show/hide toggle */}
+                <View style={[pdStyles.row, pdStyles.rowBorder]}>
+                  <View style={pdStyles.iconWrap}>
+                    <Icon name="lock" size={13} color={COLORS.PRIMARY} />
+                  </View>
+                  <View style={[pdStyles.rowContent, {paddingRight: 4}]}>
+                    <Text style={pdStyles.rowLabel}>Password</Text>
+                    <Text
+                      style={[pdStyles.rowValue, !showPassword && pdStyles.rowMasked]}
+                      numberOfLines={1}>
+                      {savedPassword
+                        ? (showPassword ? savedPassword : '•'.repeat(savedPassword.length))
+                        : '••••••••'}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(p => !p)}
+                      style={pdStyles.eyeBtn}
+                      hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                      <Icon
+                        name={showPassword ? 'eye-off' : 'eye'}
+                        size={15}
+                        color={COLORS.MUTED}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <DetailRow icon="grid"        label="Department"      value={agent?.department} />
+                <DetailRow icon="award"       label="Designation"     value={agent?.designation} />
+                <DetailRow icon="calendar"    label="Date of Joining" value={fmtDate(agent?.joiningDate)} />
+                <DetailRow icon="file-text"   label="GST Number"      value={agent?.gstNumber} />
+                <DetailRow icon="credit-card" label="PAN Card No."    value={agent?.panNumber} />
+                <DetailRow icon="briefcase"   label="Industry"        value={agent?.industry} />
+                <DetailRow icon="users"       label="Gender"          value={agent?.gender} />
+                <DetailRow icon="map-pin"     label="Address"         value={agent?.address} multiline last />
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Menu */}
@@ -170,14 +324,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  /* Avatar wrapper — same size for photo and initials */
+  avatarWrap: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    marginRight: 14,
+    borderWidth: 2.5,
+    borderColor: COLORS.PRIMARY,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+  },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: '100%',
+    height: '100%',
     backgroundColor: COLORS.PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
   },
   avatarText: {
     fontSize: 20,
@@ -195,10 +361,18 @@ const styles = StyleSheet.create({
     color: COLORS.MUTED,
     marginTop: 2,
   },
+  profileDesig: {
+    fontSize: 12,
+    color: COLORS.PRIMARY,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8,
+    flexWrap: 'wrap',
+    gap: 6,
   },
   activeBadge: {
     flexDirection: 'row',
@@ -207,7 +381,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    marginRight: 8,
   },
   activeDot: {
     width: 6,
@@ -219,6 +392,17 @@ const styles = StyleSheet.create({
   activeBadgeText: {
     fontSize: 10,
     color: COLORS.SUCCESS,
+    fontWeight: '700',
+  },
+  deptBadge: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  deptBadgeText: {
+    fontSize: 10,
+    color: '#4F46E5',
     fontWeight: '700',
   },
   zoneRow: {
@@ -318,5 +502,178 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.MUTED,
     marginTop: 4,
+  },
+
+  // ─── Personal Details Card ────────────────────────────────────────────────
+  personalCard: {
+    backgroundColor: COLORS.BG,
+    borderRadius: 0,
+    marginBottom: 12,
+  },
+  personalCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: 12,
+    marginBottom: 10,
+    gap: 12,
+    elevation: 3,
+    shadowColor: COLORS.PRIMARY,
+    shadowOffset: {width: 0, height: 3},
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+  personalCardHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  personalCardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.WHITE,
+    letterSpacing: 0.3,
+  },
+  personalCardSub: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.75)',
+    marginTop: 1,
+  },
+  personalBody: {
+    paddingBottom: 4,
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.PRIMARY,
+    letterSpacing: 1.2,
+    marginBottom: 6,
+    marginTop: 4,
+    paddingHorizontal: 2,
+  },
+  sectionCard: {
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 12,
+    marginBottom: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    overflow: 'hidden',
+  },
+
+  // Loading / error states
+  personalLoadingWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 12,
+    paddingVertical: 28,
+    gap: 10,
+    elevation: 1,
+  },
+  personalLoadingText: {
+    fontSize: 13,
+    color: COLORS.MUTED,
+    marginLeft: 8,
+  },
+  personalErrorWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.LIGHT_RED,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  personalErrorText: {
+    fontSize: 13,
+    color: COLORS.FAILED,
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  // kept for safety (unused stubs)
+  personalCardHeaderIcon_old: {},
+  personalDivider: {height: 0},
+  personalRow: {},
+  personalRowBorder: {},
+  personalRowLeft: {},
+  personalRowIconWrap: {},
+  personalRowLabel: {},
+  personalRowValue: {},
+  personalRowMasked: {},
+  personalRowNA: {},
+  personalPhotoRow: {},
+  personalPhotoImg: {},
+  personalPhotoFallback: {},
+  personalPhotoFallbackText: {},
+  personalPhotoInfo: {},
+  personalPhotoName: {},
+  personalPhotoDesig: {},
+});
+
+// ─── DetailRow styles (used by the DetailRow component above) ────────────────
+const pdStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: COLORS.WHITE,
+  },
+  rowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F2',
+  },
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: COLORS.LIGHT_RED,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  rowContent: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  rowLabel: {
+    fontSize: 12,
+    color: COLORS.MUTED,
+    fontWeight: '600',
+    flex: 1,
+  },
+  rowValue: {
+    fontSize: 13,
+    color: COLORS.TEXT,
+    fontWeight: '700',
+    textAlign: 'right',
+    flex: 1.6,
+  },
+  rowMasked: {
+    fontSize: 18,
+    letterSpacing: 3,
+    color: COLORS.MUTED,
+    fontWeight: '400',
+  },
+  rowEmpty: {
+    color: '#CCCCCC',
+    fontWeight: '400',
+    fontStyle: 'italic',
+    fontSize: 15,
+  },
+  eyeBtn: {
+    paddingLeft: 8,
   },
 });
